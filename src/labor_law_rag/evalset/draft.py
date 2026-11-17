@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
+import re
 from collections import defaultdict
 from importlib import resources
 from pathlib import Path
@@ -44,12 +45,24 @@ def _prompt(name: str) -> str:
     return resources.files("labor_law_rag.evalset").joinpath(f"prompts/{name}.txt").read_text(encoding="utf-8")
 
 
-def _sample_units(index: UnitIndex, n: int, seed: int) -> list[str]:
+# 유형을 정해서 만들 때, 그 유형의 질문을 만들 수 있는 단위만 고른다.
+_UNIT_FILTERS = {
+    "calculation": re.compile(r"\d+\s*(?:일|원|시간|퍼센트|분의|개월|년|주|세)"),
+    "conditional": re.compile(r"경우|이상|미만|이하|초과"),
+}
+_QTYPE_GUIDE = {
+    "fact": "조문에 적힌 사실 하나를 묻는 질문",
+    "conditional": "근무 기간 · 출근율 · 사업장 규모 같은 조건이 질문에 들어 있고, 그 조건에 따라 답이 정해지는 질문",
+    "calculation": "구체적인 숫자(임금 · 기간 · 시간)를 주고 계산한 값을 묻는 질문. 답을 바꾸는 전제를 질문에 모두 적는다",
+}
+
+
+def _sample_units(index: UnitIndex, n: int, seed: int, pattern: re.Pattern | None = None) -> list[str]:
     """법령 · 시행령 · 고시 · 별표 단위를 주제별로 돌아가며 n개 고른다."""
     groups: dict[str, list[str]] = defaultdict(list)
     for u in sorted(index.all_units(), key=lambda u: u.unit_id):
         doc = index.document(u.doc_id)
-        if doc.source_type in STATUTE_TYPES:
+        if doc.source_type in STATUTE_TYPES and (pattern is None or pattern.search(index.text(u.unit_id))):
             groups[doc.topics[0] if doc.topics else ""].append(u.unit_id)
     rng = random.Random(seed)
     for g in sorted(groups):
@@ -62,11 +75,23 @@ def _sample_units(index: UnitIndex, n: int, seed: int) -> list[str]:
     return picked
 
 
-def draft_from_units(llm: LLMClient, index: UnitIndex, *, model: str, n: int, seed: int) -> list[DraftItem]:
+def draft_from_units(
+    llm: LLMClient,
+    index: UnitIndex,
+    *,
+    model: str,
+    n: int,
+    seed: int,
+    qtype: Literal["fact", "conditional", "calculation"] | None = None,
+) -> list[DraftItem]:
+    """qtype을 주면 그 유형으로 만들 수 있는 단위만 고르고, 프롬프트로 유형을 강제한다."""
     template = _prompt("from_unit")
+    target = ""
+    if qtype:
+        target = f"\n이번 질문의 qtype은 반드시 {qtype}입니다: {_QTYPE_GUIDE[qtype]}.\n"
     items: list[DraftItem] = []
-    for unit_id in _sample_units(index, n, seed):
-        prompt = template.format(unit_id=unit_id, text=index.text(unit_id))
+    for unit_id in _sample_units(index, n, seed, _UNIT_FILTERS.get(qtype or "")):
+        prompt = template.format(unit_id=unit_id, text=index.text(unit_id)) + target
         try:
             out = generate_json(llm, prompt, model=model, schema=DraftOut)
         except LLMOutputError as e:
@@ -74,7 +99,7 @@ def draft_from_units(llm: LLMClient, index: UnitIndex, *, model: str, n: int, se
             continue
         items.append(DraftItem(
             qid=make_qid("llm_draft", out.question), question=out.question, answer=out.answer,
-            answer_numbers=out.answer_numbers, qtype=out.qtype, evidence=[unit_id],
+            answer_numbers=out.answer_numbers, qtype=qtype or out.qtype, evidence=[unit_id],
             origin="llm_draft", origin_detail=model,
         ))
     return items

@@ -33,6 +33,15 @@ def test_title_topic_comes_first():
     assert tag_topics(d, topics).topics == ["연차휴가", "근로계약", "임금", "퇴직금"]
 
 
+def test_exclude_phrases_do_not_trigger_topics():
+    topics = {"근로시간": ["근로시간"], "해고": ["해고"]}
+    d = Document(doc_id="interp:6", source_type="interpretation", title="근로시간면제자의 휴일 활동",
+                 text="근로시간면제 한도 내 활동", date=None, url="", license="")
+    assert tag_topics(d, topics, exclude=["근로시간면제"]).topics == []
+    d2 = d.model_copy(update={"text": "근로시간면제와 무관하게 근로시간 단축"})
+    assert tag_topics(d2, topics, exclude=["근로시간면제"]).topics == ["근로시간"]
+
+
 def test_holdout_is_deterministic_and_sized():
     docs = make_docs(interp=120)
     a = select_holdout(docs, {"interpretation": 40}, seed=1)

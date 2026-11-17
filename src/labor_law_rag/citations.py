@@ -67,7 +67,7 @@ def extract_citations(text: str, law_names: list[str], index: UnitIndex) -> list
                 continue
             # 법령명과 조문 사이에 다른 글자가 끼면(예: "근로기준법에 따라 ... 제5조") 인용으로 보지 않는다.
             between = text[prev_end:m.start()]
-            if between.strip():
+            if between.strip(" \t\n」』"):  # 「근로기준법」 제60조처럼 낫표는 건너뛴다
                 pending_law = None
                 continue
             for uid in _resolve(pending_law, m.group("no"), m.group("branch"), m.group("para"), index):

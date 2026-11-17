@@ -65,6 +65,20 @@ def test_unit_draft_sampling_is_deterministic(law_index):
     assert [i.evidence for i in a] == [i.evidence for i in b]
 
 
+def test_target_qtype_is_forced_and_in_prompt(law_index):
+    llm = FakeLLM([_out(qtype="fact")] * 2)
+    items = draft_from_units(llm, law_index, model="m", n=2, seed=1, qtype="conditional")
+    assert [i.qtype for i in items] == ["conditional", "conditional"]
+    assert "반드시 conditional" in llm.calls[0]["prompt"]
+
+
+def test_calculation_target_prefers_units_with_numbers(law_index):
+    llm = FakeLLM([_out()] * 4)
+    items = draft_from_units(llm, law_index, model="m", n=4, seed=1, qtype="calculation")
+    # 숫자(일 · 퍼센트)가 있는 단위는 제60조 ①②뿐이므로 그 둘만 뽑힌다
+    assert sorted(i.evidence[0] for i in items) == ["근로기준법 제60조 제1항", "근로기준법 제60조 제2항"]
+
+
 def test_calculation_prompt_demands_premises(law_index):
     llm = FakeLLM([_out()])
     draft_from_units(llm, law_index, model="m", n=1, seed=1)

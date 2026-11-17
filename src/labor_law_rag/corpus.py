@@ -18,11 +18,17 @@ from labor_law_rag.models import Document, EvidenceUnit
 TOPIC_FILTERED = {"interpretation"}
 
 
-def tag_topics(doc: Document, topics: dict[str, list[str]]) -> Document:
-    """제목에 맞는 주제를 앞에, 본문에만 맞는 주제를 뒤에 둔다. topics[0]은 층화의 기준이 된다."""
-    in_title = [name for name, kws in topics.items() if any(kw in doc.title for kw in kws)]
+def tag_topics(doc: Document, topics: dict[str, list[str]], exclude: list[str] | tuple = ()) -> Document:
+    """제목에 맞는 주제를 앞에, 본문에만 맞는 주제를 뒤에 둔다. topics[0]은 층화의 기준이 된다.
+
+    exclude의 말(예: "근로시간면제")은 매칭 전에 지운다.
+    """
+    title, text = doc.title, doc.text
+    for phrase in exclude:
+        title, text = title.replace(phrase, " "), text.replace(phrase, " ")
+    in_title = [name for name, kws in topics.items() if any(kw in title for kw in kws)]
     in_text = [name for name, kws in topics.items()
-               if name not in in_title and any(kw in doc.text for kw in kws)]
+               if name not in in_title and any(kw in text for kw in kws)]
     return doc.model_copy(update={"topics": in_title + in_text})
 
 
@@ -74,6 +80,7 @@ def build_corpus(
     heldout_path: Path,
     manifest_path: Path,
     topics: dict[str, list[str]],
+    exclude: list[str] | tuple = (),
     holdout_counts: dict[str, int],
     seed: int,
     base_date: date,
@@ -95,7 +102,7 @@ def build_corpus(
         units_path = p.with_name(p.name.replace("_documents.jsonl", "_units.jsonl"))
         units.extend(read_jsonl(units_path, EvidenceUnit))
 
-    tagged = [tag_topics(d, topics) for d in docs]
+    tagged = [tag_topics(d, topics, exclude) for d in docs]
     kept = [d for d in tagged if d.source_type not in TOPIC_FILTERED or d.topics]
     held_ids = select_holdout(kept, holdout_counts, seed)
 

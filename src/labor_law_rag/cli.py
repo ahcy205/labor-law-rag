@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from labor_law_rag.config import load_corpus_config, load_topics
+from labor_law_rag.config import load_corpus_config, load_topic_excludes, load_topics
 
 app = typer.Typer(help="labor-law-rag: 말뭉치 수집 · 평가 세트 · 평가 도구", no_args_is_help=True)
 
@@ -161,12 +161,20 @@ def _report_drafts() -> None:
 
 
 @draft_app.command("law")
-def draft_law(n: int = 120, model: str = DRAFT_MODEL, seed: int | None = None) -> None:
+def draft_law(
+    n: int = 120,
+    model: str = DRAFT_MODEL,
+    seed: int | None = None,
+    qtype: str | None = typer.Option(None, help="fact · conditional · calculation 중 하나로 유형을 정한다"),
+) -> None:
     """조문 단위에서 LLM으로 질문 초안을 만든다."""
     from labor_law_rag.evalset.draft import append_drafts, draft_from_units
 
-    items = draft_from_units(_llm(), _corpus_index(), model=model, n=n,
-                             seed=load_corpus_config().seed if seed is None else seed)
+    if qtype not in (None, "fact", "conditional", "calculation"):
+        raise typer.BadParameter("qtype은 fact, conditional, calculation 중 하나")
+    base = load_corpus_config().seed if seed is None else seed
+    offset = {"fact": 1, "conditional": 2, "calculation": 3}.get(qtype, 0)  # 유형마다 다른 단위를 뽑게
+    items = draft_from_units(_llm(), _corpus_index(), model=model, n=n, seed=base + offset, qtype=qtype)
     typer.echo(f"생성 {len(items)}개, 추가 {append_drafts(DRAFTS, items)}개")
     _report_drafts()
 
@@ -310,7 +318,7 @@ def build_corpus_cmd(force: bool = typer.Option(False, help="떼어 둔 원문�
 
     cfg = load_corpus_config()
     build = build_corpus(
-        processed_dir=PROCESSED, heldout_path=HELDOUT, manifest_path=MANIFEST, topics=load_topics(),
+        processed_dir=PROCESSED, heldout_path=HELDOUT, manifest_path=MANIFEST, topics=load_topics(), exclude=load_topic_excludes(),
         holdout_counts=cfg.holdout, seed=cfg.seed, base_date=cfg.base_date, force=force,
     )
     m = json.loads(build.manifest.read_text(encoding="utf-8"))

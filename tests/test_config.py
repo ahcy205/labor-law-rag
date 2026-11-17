@@ -30,3 +30,10 @@ def test_corpus_config_loads_repo_file():
 def test_topics_load():
     t = load_topics()
     assert "주휴" in t["주휴수당"]
+    assert "제외어" not in t
+
+
+def test_topic_excludes_load():
+    from labor_law_rag.config import load_topic_excludes
+
+    assert "근로시간면제" in load_topic_excludes()

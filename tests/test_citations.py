@@ -26,5 +26,10 @@ def test_unknown_article_is_ignored(law_index):
     assert extract_citations("근로기준법 제999조, 산업안전보건법 제5조", LAWS, law_index) == []
 
 
+def test_bracketed_law_name(law_index):
+    t = "「근로기준법」 제60조제2항에 따라 ... 「근로기준법 시행령」 제33조제1항"
+    assert extract_citations(t, LAWS, law_index) == ["근로기준법 제60조 제2항", "근로기준법 시행령 제33조 제1항"]
+
+
 def test_same_law_without_prior_law_is_ignored(law_index):
     assert extract_citations("같은 법 제60조", LAWS, law_index) == []

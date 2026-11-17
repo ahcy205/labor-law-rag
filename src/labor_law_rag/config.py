@@ -68,5 +68,12 @@ def load_corpus_config(path: Path = Path("configs/corpus.yaml")) -> CorpusConfig
     return CorpusConfig.model_validate(_load_yaml(path))
 
 
+_EXCLUDE_KEY = "제외어"
+
+
 def load_topics(path: Path = Path("configs/topics.yaml")) -> dict[str, list[str]]:
-    return {str(k): [str(x) for x in v] for k, v in _load_yaml(path).items()}
+    return {str(k): [str(x) for x in v] for k, v in _load_yaml(path).items() if k != _EXCLUDE_KEY}
+
+
+def load_topic_excludes(path: Path = Path("configs/topics.yaml")) -> list[str]:
+    return [str(x) for x in _load_yaml(path).get(_EXCLUDE_KEY, [])]
