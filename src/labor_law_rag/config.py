@@ -49,6 +49,7 @@ class LawSpec(BaseModel):
     kind: Literal["law", "decree", "notice"]
     articles: list[str] | None = None
     delegated_from: str | None = None
+    exclude_articles: list[str] = []
 
 
 class CorpusConfig(BaseModel):

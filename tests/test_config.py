@@ -23,7 +23,8 @@ def test_corpus_config_loads_repo_file():
     c = load_corpus_config()
     assert c.base_date == date(2026, 11, 17)
     assert any(law.name == "고용보험법" and "제70조" in law.articles for law in c.laws)
-    assert any(law.name == "고용보험법 시행령" and law.delegated_from == "고용보험법" for law in c.laws)
+    decree = next(law for law in c.laws if law.name == "고용보험법 시행령")
+    assert decree.delegated_from == "고용보험법" and "제145조" in decree.exclude_articles
 
 
 def test_topics_load():

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -72,6 +73,66 @@ def search_versions(fetcher: CachedFetcher, oc: str, name: str, base_date: date)
         if len(etree.fromstring(xml).findall("law")) < 100:
             break
     return versions
+
+
+class NoticeVersion(BaseModel):
+    name: str
+    rule_id: str
+    effective_date: date
+
+
+_WAGE_NOTICE = re.compile(r"^\d{4}년 적용 최저임금 고시$")
+
+
+def select_notice(search_xml: bytes, base_date: date) -> NoticeVersion:
+    """행정규칙 목록에서 기준일에 시행 중인 고용노동부 'YYYY년 적용 최저임금 고시'를 고른다.
+
+    '최저임금안 고시', '선원 최저임금 고시'는 이름 규칙으로 걸러진다.
+    """
+    root = etree.fromstring(search_xml)
+    cands = []
+    for r in root.findall("admrul"):
+        name = (r.findtext("행정규칙명") or "").strip()
+        if _WAGE_NOTICE.match(name) and (r.findtext("소관부처명") or "").strip() == "고용노동부":
+            cands.append(NoticeVersion(name=name, rule_id=r.findtext("행정규칙일련번호").strip(),
+                                       effective_date=_ymd(r.findtext("시행일자"))))
+    effective = [c for c in cands if c.effective_date <= base_date]
+    if not effective:
+        raise ValueError(f"{base_date}에 시행 중인 최저임금 고시가 없습니다")
+    return max(effective, key=lambda c: c.effective_date)
+
+
+def notice_pdf_link(body_xml: bytes) -> str:
+    """고시 본문은 비어 있고 첨부 PDF만 있다. 고시 PDF 링크(이유서 제외)를 돌려준다."""
+    root = etree.fromstring(body_xml)
+    att = root.find("첨부파일")
+    names = [(n.text or "").strip() for n in att.findall("첨부파일명")]
+    links = [(n.text or "").strip() for n in att.findall("첨부파일링크")]
+    for name, link in zip(names, links, strict=True):
+        if name.endswith(".pdf") and "고시" in name and "이유" not in name:
+            return link
+    raise ValueError(f"고시 PDF 첨부를 찾을 수 없습니다: {names}")
+
+
+def collect_notice(fetcher: CachedFetcher, oc: str, base_date: date) -> tuple[Path, NoticeVersion, str]:
+    """기준일 시행 최저임금 고시 PDF를 캐시에 받고 (경로, 버전, PDF 주소)를 돌려준다."""
+    search = fetcher.get(
+        f"{BASE}/lawSearch.do",
+        {"OC": oc, "target": "admrul", "type": "XML", "query": "최저임금", "display": 100},
+        cache_key=f"notice/search_최저임금_{base_date:%Y%m%d}", validate=check_api_error,
+    )
+    v = select_notice(search, base_date)
+    body = fetcher.get(f"{BASE}/lawService.do", {"OC": oc, "target": "admrul", "type": "XML", "ID": v.rule_id},
+                       cache_key=f"notice/body_{v.rule_id}", validate=check_api_error)
+    link = notice_pdf_link(body).replace("http://", "https://")
+    key = f"notice/pdf_{v.rule_id}"
+
+    def is_pdf(b: bytes) -> None:
+        if not b.startswith(b"%PDF"):
+            raise ValueError("PDF가 아닌 응답")
+
+    fetcher.get(link, cache_key=key, validate=is_pdf)
+    return fetcher.cache_dir / f"{key}.bin", v, link
 
 
 def collect_law(fetcher: CachedFetcher, oc: str, spec: LawSpec, base_date: date) -> Path:

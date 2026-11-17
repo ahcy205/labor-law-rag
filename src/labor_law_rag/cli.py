@@ -40,18 +40,37 @@ def collect_laws() -> None:
     from labor_law_rag.io import write_jsonl
     from labor_law_rag.normalize.law_xml import parse_law
 
+    from labor_law_rag.collect.law import collect_notice
+    from labor_law_rag.normalize.scope import delegated_articles, filter_articles, parse_notice
+
     cfg = load_corpus_config()
     fetcher, oc = _law_fetcher()
-    docs, units = [], []
+    parsed: dict[str, tuple] = {}
     for spec in cfg.laws:
-        if spec.kind not in ("law", "decree"):
+        if spec.kind == "notice":
+            path, v, link = collect_notice(fetcher, oc, cfg.base_date)
+            parsed[spec.name] = parse_notice(path.read_bytes(), title=v.name, effective_date=v.effective_date,
+                                             url=link)
             continue
         path = collect_law(fetcher, oc, spec, cfg.base_date)
-        doc, us = parse_law(path.read_bytes(), source_type=spec.kind,
-                            url=f"https://www.law.go.kr/법령/{spec.name.replace(' ', '')}")
+        parsed[spec.name] = parse_law(path.read_bytes(), source_type=spec.kind,
+                                      url=f"https://www.law.go.kr/법령/{spec.name.replace(' ', '')}")
+
+    docs, units = [], []
+    for spec in cfg.laws:
+        doc, us = parsed[spec.name]
+        note = ""
+        if spec.articles:
+            doc, us = filter_articles(doc, us, spec.articles)
+            note = f" (조문 {len(spec.articles)}개만)"
+        elif spec.delegated_from:
+            parent = next(s for s in cfg.laws if s.name == spec.delegated_from)
+            keep = [k for k in delegated_articles(doc, us, parent.articles or []) if k not in spec.exclude_articles]
+            doc, us = filter_articles(doc, us, keep)
+            note = f" (위임 조문 {', '.join(keep)})"
         docs.append(doc)
         units.extend(us)
-        typer.echo(f"{doc.title}: 시행 {doc.date}, 근거 단위 {len(us)}개, {len(doc.text):,}자")
+        typer.echo(f"{doc.title}: 시행 {doc.date}, 근거 단위 {len(us)}개, {len(doc.text):,}자{note}")
     write_jsonl(PROCESSED / "law_documents.jsonl", docs)
     write_jsonl(PROCESSED / "law_units.jsonl", units)
 

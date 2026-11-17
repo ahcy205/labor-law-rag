@@ -8,7 +8,10 @@ laws:
   - {name: 최저임금법, kind: law}
   - {name: 최저임금법 시행령, kind: decree}
   - {name: 남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률, kind: law}
-  - {name: 고용보험법, kind: law, articles: [제70조, 제71조, 제72조, 제73조, 제74조, 제75조, 제76조, 제77조]}
-  - {name: 고용보험법 시행령, kind: decree, delegated_from: 고용보험법}
+  # 제5장 육아휴직 급여 등(제70조~제77조). 제72조는 삭제됨, 제77조의2부터는 예술인 · 노무제공자 특례라 제외
+  - {name: 고용보험법, kind: law, articles: [제70조, 제71조, 제73조, 제73조의2, 제74조, 제75조, 제75조의2, 제76조, 제76조의2, 제77조]}
+  # 위임 조문 중 예술인 · 노무제공자 특례, 권한 위임, 고유식별정보 처리는 범위 밖
+  - {name: 고용보험법 시행령, kind: decree, delegated_from: 고용보험법,
+     exclude_articles: [제104조의9, 제104조의16, 제145조, 제145조의2]}
   - {name: 최저임금 고시, kind: notice}
 holdout: {interpretation: 40}

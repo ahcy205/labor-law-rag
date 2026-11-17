@@ -71,6 +71,7 @@ def parse_law(xml: bytes, *, source_type: SourceType, url: str) -> tuple[Documen
     doc_id = f"{source_type}:{name}"
     b = _Builder()
     spans: list[tuple[str, int, int]] = []
+    articles: list[tuple[str, int, int]] = []  # (조 키 "제5조의2", 조문 머리 시작, 조 끝)
 
     for art in root.findall("조문/조문단위"):
         content = _clean(art.findtext("조문내용"))
@@ -82,7 +83,8 @@ def parse_law(xml: bytes, *, source_type: SourceType, url: str) -> tuple[Documen
             continue
         no = _clean(art.findtext("조문번호"))
         branch = _clean(art.findtext("조문가지번호"))
-        art_id = f"{name} 제{no}조" + (f"의{branch}" if branch and branch != "0" else "")
+        art_key = f"제{no}조" + (f"의{branch}" if branch and branch != "0" else "")
+        art_id = f"{name} {art_key}"
 
         head_start, head_end = b.add(content)
         header = _HEADER.match(content)
@@ -115,11 +117,13 @@ def parse_law(xml: bytes, *, source_type: SourceType, url: str) -> tuple[Documen
                     start = s if start is None else start
             if start is not None:
                 spans.append((art_id, start, end))
+        articles.append((art_key, head_start, b.pos - 1))
 
     text = b.text
     doc = Document(
         doc_id=doc_id, source_type=source_type, title=name, text=text,
         date=datetime.strptime(eff, "%Y%m%d").date() if eff else None, url=url, license="법령(저작권 보호 대상 아님)",
+        meta={"articles": [list(a) for a in articles]},
     )
     units = []
     for unit_id, start, end in spans:
