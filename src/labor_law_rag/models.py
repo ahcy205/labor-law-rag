@@ -56,6 +56,10 @@ class _ItemFields(BaseModel):
     notes: str = ""
 
 
+class DraftItem(_ItemFields):
+    """검수 전 문항 초안. 근거가 비어 있을 수 있어 검증이 느슨하다."""
+
+
 class EvalItem(_ItemFields):
     """검수를 통과한 평가 문항. 답 없음 여부와 근거가 서로 맞아야 한다."""
 
