@@ -18,8 +18,42 @@ MANIFEST = DATA / "manifest.json"
 DRAFTS = DATA / "eval" / "drafts.jsonl"
 DRAFT_MODEL = "qwen3:8b"  # 채점(계획 2)과 다른 모델로 문항 초안을 만든다
 
+RAW = DATA / "raw"
+
 draft_app = typer.Typer(help="평가 문항 초안 생성", no_args_is_help=True)
 app.add_typer(draft_app, name="draft")
+collect_app = typer.Typer(help="원본 수집과 정규화", no_args_is_help=True)
+app.add_typer(collect_app, name="collect")
+
+
+def _law_fetcher():
+    from labor_law_rag.config import load_settings, require
+    from labor_law_rag.fetch import CachedFetcher
+
+    return CachedFetcher(RAW), require(load_settings(), "law_oc")
+
+
+@collect_app.command("laws")
+def collect_laws() -> None:
+    """기준일에 시행 중인 법령 · 시행령 본문을 받아 조 · 항 단위로 정규화한다."""
+    from labor_law_rag.collect.law import collect_law
+    from labor_law_rag.io import write_jsonl
+    from labor_law_rag.normalize.law_xml import parse_law
+
+    cfg = load_corpus_config()
+    fetcher, oc = _law_fetcher()
+    docs, units = [], []
+    for spec in cfg.laws:
+        if spec.kind not in ("law", "decree"):
+            continue
+        path = collect_law(fetcher, oc, spec, cfg.base_date)
+        doc, us = parse_law(path.read_bytes(), source_type=spec.kind,
+                            url=f"https://www.law.go.kr/법령/{spec.name.replace(' ', '')}")
+        docs.append(doc)
+        units.extend(us)
+        typer.echo(f"{doc.title}: 시행 {doc.date}, 근거 단위 {len(us)}개, {len(doc.text):,}자")
+    write_jsonl(PROCESSED / "law_documents.jsonl", docs)
+    write_jsonl(PROCESSED / "law_units.jsonl", units)
 
 
 def _corpus_index():
