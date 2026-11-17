@@ -192,6 +192,7 @@ def draft_heldout(model: str = DRAFT_MODEL) -> None:
 
 
 REVIEW_LOG = DATA / "eval" / "review_log.jsonl"
+CLAUDE_REVIEW = DATA / "eval" / "claude_review.jsonl"
 
 
 @app.command("review")
@@ -202,6 +203,7 @@ def review_cmd(
     docs: Path = PROCESSED / "corpus_documents.jsonl",
     units: Path = PROCESSED / "corpus_units.jsonl",
     heldout: Path = HELDOUT,
+    claude_review: Path = CLAUDE_REVIEW,
 ) -> None:
     """Gradio 검수 화면을 띄운다. 결정은 review_log.jsonl에 한 줄씩 쌓인다."""
     from labor_law_rag.corpus import UnitIndex
@@ -213,7 +215,8 @@ def review_cmd(
     index = UnitIndex.from_files(docs, units)
     held = {d.doc_id: d for d in read_jsonl(heldout, Document)} if heldout.exists() else {}
     store = ReviewStore(drafts, log, index, heldout_ids=set(held))
-    build_app(store, index, held).launch(server_name="127.0.0.1", server_port=port)
+    opinions = {r["qid"]: r for r in read_jsonl(claude_review)} if claude_review.exists() else {}
+    build_app(store, index, held, opinions).launch(server_name="127.0.0.1", server_port=port)
 
 
 EVALSET = DATA / "eval" / "evalset.jsonl"

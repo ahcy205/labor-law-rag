@@ -40,3 +40,42 @@ def test_build_app_returns_blocks(tmp_path, law_index):
     write_jsonl(tmp_path / "d.jsonl", [BASE])
     store = ReviewStore(tmp_path / "d.jsonl", tmp_path / "log.jsonl", law_index, heldout_ids=set())
     assert isinstance(build_app(store, law_index, heldout={}), gr.Blocks)
+
+
+OPINION = {
+    "qid": "llm-1", "verdict": "edit", "confidence": "low", "dup_leak": True,
+    "reason": "제60조 제1항 '15일' 확인",
+    "proposed": {"question": "연차 며칠?", "answer": "15일", "answer_numbers": [15.0],
+                 "evidence": ["근로기준법 제60조 제1항"], "qtype": "fact", "no_answer_kind": None, "notes": "n"},
+    "changes": [{"field": "question", "before": "q", "after": "연차 며칠?", "why": "구어체로"}],
+}
+
+
+def test_opinion_panel_shows_verdict_reason_and_changes():
+    from labor_law_rag.evalset.review_app import opinion_panel
+
+    md = opinion_panel(OPINION)
+    assert "수정" in md and "확신 낮음" in md and "중복 원문" in md
+    assert "15일" in md and "구어체로" in md and "연차 며칠?" in md
+
+
+def test_opinion_panel_without_opinion():
+    from labor_law_rag.evalset.review_app import opinion_panel
+
+    assert "의견 없음" in opinion_panel(None)
+
+
+def test_proposal_to_form_values():
+    from labor_law_rag.evalset.review_app import NO_KIND, proposal_to_form
+
+    q, a, n, t, k, ev, nt = proposal_to_form(OPINION["proposed"])
+    assert (q, a, n, t, k, ev, nt) == ("연차 며칠?", "15일", "15", "fact", NO_KIND, "근로기준법 제60조 제1항", "n")
+
+
+def test_build_app_with_opinions(tmp_path, law_index):
+    from labor_law_rag.evalset.review_store import ReviewStore
+    from labor_law_rag.io import write_jsonl
+
+    write_jsonl(tmp_path / "d.jsonl", [BASE])
+    store = ReviewStore(tmp_path / "d.jsonl", tmp_path / "log.jsonl", law_index, heldout_ids=set())
+    assert isinstance(build_app(store, law_index, heldout={}, opinions={"llm-1": OPINION}), gr.Blocks)
