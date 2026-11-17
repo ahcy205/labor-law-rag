@@ -260,7 +260,7 @@ def finalize_cmd(force: bool = typer.Option(False, help="이미 있는 평가 �
     if done < total:
         typer.echo(f"경고: 검수하지 않은 초안이 {total - done}개 있습니다(검수 {done}/{total}).")
     if force:
-        typer.echo("경고: 평가 세트를 다시 나눕니다. docs/decisions.md에 이유를 남기세요.")
+        typer.echo("경고: 평가 세트를 다시 확정합니다. 이미 나눈 문항의 분할은 그대로 두고 새 문항만 나눕니다. docs/decisions.md에 이유를 남기세요.")
     out = finalize(store, EVALSET, seed=load_corpus_config().seed, force=force)
     typer.echo(split_table(load_evalset(out, "all")))
 

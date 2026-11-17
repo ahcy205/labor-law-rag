@@ -53,9 +53,33 @@ def finalize(
     if out_path.exists() and not force:
         raise FileExistsError(f"{out_path}가 이미 있습니다. 분할을 다시 하면 docs/decisions.md에 이유를 남기고 --force")
     items = sorted(store.current().values(), key=lambda i: i.qid)
-    items = assign_splits(items, seed=seed)
+    if out_path.exists():
+        # 다시 확정할 때는 이미 나눈 문항의 분할을 그대로 둔다. dev로 조정에 쓴 문항이 test로 넘어가면
+        # test 잠금(설계 4.4)이 깨진다. 새 문항만 층마다 dev_ratio에 가깝게 채운다.
+        prev = {i.qid: i.split for i in read_jsonl(out_path, EvalItem) if i.split}
+        items = _top_up(items, prev, seed=seed)
+    else:
+        items = assign_splits(items, seed=seed)
     write_jsonl(out_path, items)
     return out_path
+
+
+def _top_up(items: list[EvalItem], prev: dict[str, str], *, seed: int, dev_ratio: float = 0.6) -> list[EvalItem]:
+    split_of = {i.qid: prev[i.qid] for i in items if i.qid in prev}
+    strata: dict[str, list[EvalItem]] = defaultdict(list)
+    for it in items:
+        strata[_stratum(it)].append(it)
+    for name in sorted(strata):
+        group = strata[name]
+        new = sorted((i for i in group if i.qid not in split_of), key=lambda i: i.qid)
+        if not new:
+            continue
+        random.Random(f"{seed}:{name}").shuffle(new)
+        have_dev = sum(split_of.get(i.qid) == "dev" for i in group)
+        n_dev = min(max(int(len(group) * dev_ratio + 0.5) - have_dev, 0), len(new))
+        for k, it in enumerate(new):
+            split_of[it.qid] = "dev" if k < n_dev else "test"
+    return [it.model_copy(update={"split": split_of[it.qid]}) for it in items]
 
 
 def load_evalset(path: Path, split: Literal["dev", "test", "all"]) -> list[EvalItem]:

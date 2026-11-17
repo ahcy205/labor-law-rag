@@ -10,6 +10,7 @@ from labor_law_rag.corpus import UnitIndex
 from labor_law_rag.evalset.review_store import ReviewStore
 from labor_law_rag.models import Document, DraftItem
 
+_THOUSANDS = re.compile(r"(?<![\d.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d|,\d)")
 QTYPES = ["fact", "conditional", "multi_doc", "calculation", "no_answer", "amendment"]
 NO_KIND = "없음"
 KINDS = [NO_KIND, "out_of_scope", "in_scope_missing"]
@@ -26,7 +27,9 @@ def form_to_item(
     notes: str,
 ) -> DraftItem:
     numbers = []
-    for tok in re.split(r"[,\s]+", numbers_text.strip()):
+    # 2,156,880처럼 세 자리마다 붙은 쉼표는 숫자의 일부로 본다. 구분은 "쉼표+공백", 세미콜론, 줄바꿈.
+    text = _THOUSANDS.sub(lambda m: m.group(0).replace(",", ""), numbers_text.strip())
+    for tok in re.split(r"[,;\s]+", text):
         if not tok:
             continue
         try:
@@ -83,7 +86,7 @@ def opinion_panel(op: dict | None) -> str:
 
 
 def proposal_to_form(p: dict) -> tuple[str, str, str, str, str, str, str]:
-    nums = ", ".join(f"{x:g}" for x in p.get("answer_numbers") or [])
+    nums = format_numbers(p.get("answer_numbers") or [])
     return (p["question"], p["answer"], nums, p["qtype"], p.get("no_answer_kind") or NO_KIND,
             "\n".join(p.get("evidence") or []), p.get("notes") or "")
 
@@ -93,6 +96,11 @@ def _source_panel(item: DraftItem, heldout: dict[str, Document]) -> str:
     if src is None:
         return f"_출처: {item.origin} {item.origin_detail}_"
     return f"#### 떼어 둔 원문: {src.title} ({src.date})\n\n{src.text}"
+
+
+def format_numbers(nums: list[float]) -> str:
+    """입력칸에 넣을 숫자 문자열. 지수 표기 없이 값을 그대로 되살릴 수 있게 쓴다."""
+    return ", ".join(str(int(x)) if float(x).is_integer() else repr(float(x)) for x in nums)
 
 
 def review_base(store: ReviewStore, draft: DraftItem) -> tuple[DraftItem, str]:
@@ -127,7 +135,7 @@ def build_app(
             return ("", prog, "모든 초안을 검수했습니다.", "", "", "", QTYPES[0], NO_KIND, "", "", False,
                     message, "", "", "")
         d, note = review_base(store, drafts[qid])
-        nums = ", ".join(f"{x:g}" for x in d.answer_numbers)
+        nums = format_numbers(d.answer_numbers)
         head = f"`{qid}` · 출처 {d.origin} {d.origin_detail}" + (f"\n\n**{note}**" if note else "")
         return (
             qid, prog, head, d.question, d.answer, nums, d.qtype,
@@ -144,7 +152,7 @@ def build_app(
             with gr.Column(scale=1):
                 question = gr.Textbox(label="질문", lines=2)
                 answer = gr.Textbox(label="정답", lines=3)
-                numbers = gr.Textbox(label="숫자 정답 (쉼표로 구분)")
+                numbers = gr.Textbox(label="숫자 정답 (여러 개는 쉼표+공백이나 줄바꿈으로 구분, 2,156,880 같은 자릿수 쉼표 가능)")
                 with gr.Row():
                     qtype = gr.Dropdown(QTYPES, label="유형")
                     kind = gr.Dropdown(KINDS, label="답 없음 종류")

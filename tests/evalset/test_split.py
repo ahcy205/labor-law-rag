@@ -45,6 +45,24 @@ class _FakeStore:
         return {i.qid: i for i in self._items}
 
 
+def test_force_refinalize_keeps_existing_splits(tmp_path):
+    out = tmp_path / "evalset.jsonl"
+    finalize(_FakeStore(make_items({"calculation": 5, "fact": 20, "no_answer": 10})), out, seed=1)
+    before = {i.qid: i.split for i in load_evalset(out, "all")}
+    more = make_items({"calculation": 10, "fact": 20, "no_answer": 10})  # calculation 5개 추가
+    finalize(_FakeStore(more), out, seed=1, force=True)
+    after = {i.qid: i.split for i in load_evalset(out, "all")}
+    assert all(after[q] == s for q, s in before.items())
+    assert sum(after[f"calculation-{i}"] == "dev" for i in range(10)) == 6
+
+
+def test_force_refinalize_drops_removed_items(tmp_path):
+    out = tmp_path / "evalset.jsonl"
+    finalize(_FakeStore(make_items({"fact": 10})), out, seed=1)
+    finalize(_FakeStore(make_items({"fact": 8})), out, seed=1, force=True)
+    assert len(load_evalset(out, "all")) == 8
+
+
 def test_finalize_writes_and_refuses_overwrite(tmp_path):
     out = tmp_path / "evalset.jsonl"
     store = _FakeStore(make_items({"fact": 5, "no_answer": 4}))

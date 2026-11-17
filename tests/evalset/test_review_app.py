@@ -86,6 +86,22 @@ def test_review_base_uses_last_edit_for_reopened_item(tmp_path, law_index):
     assert item.question == "고친 질문" and "다시 검수" in note and "interp:1" in note
 
 
+def test_numbers_keep_thousands_separators():
+    it = form_to_item(BASE, "q", "a", "2,156,880, 209", "fact", "", "x", "")
+    assert it.answer_numbers == [2156880.0, 209.0]
+    it = form_to_item(BASE, "q", "a", "2,156,880\n209", "fact", "", "x", "")
+    assert it.answer_numbers == [2156880.0, 209.0]
+
+
+def test_format_numbers_round_trips_large_values():
+    from labor_law_rag.evalset.review_app import format_numbers
+
+    nums = [1234567.0, 2156880.0, 1.5, 15.0]
+    text = format_numbers(nums)
+    assert "e" not in text
+    assert form_to_item(BASE, "q", "a", text, "fact", "", "x", "").answer_numbers == nums
+
+
 def test_build_app_with_opinions(tmp_path, law_index):
     from labor_law_rag.evalset.review_store import ReviewStore
     from labor_law_rag.io import write_jsonl
