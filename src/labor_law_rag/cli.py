@@ -33,14 +33,77 @@ def _law_fetcher():
     return CachedFetcher(RAW), require(load_settings(), "law_oc")
 
 
+@collect_app.command("interpretations")
+def collect_interpretations_cmd() -> None:
+    """고용노동부 법령해석 목록을 받고, 안건명이 주제에 맞는 건의 본문을 받는다."""
+    from labor_law_rag.collect.interpretation import fetch_interpretation, list_interpretations, match_topics
+    from labor_law_rag.fetch import FetchError
+    from labor_law_rag.io import write_jsonl
+    from labor_law_rag.normalize.qa import whole_doc_unit
+
+    fetcher, oc = _law_fetcher()
+    topics = load_topics()
+    refs = list_interpretations(fetcher, oc)
+    targets = [r for r in refs if match_topics(r.title, topics)]
+    typer.echo(f"목록 {len(refs)}건 중 안건명이 주제에 맞는 {len(targets)}건의 본문을 받습니다")
+    docs, failed = [], []
+    for i, r in enumerate(targets, 1):
+        try:
+            doc = fetch_interpretation(fetcher, oc, r.serial)
+        except FetchError as e:
+            failed.append(r.serial)
+            typer.echo(f"실패 {r.serial}: {e}")
+            continue
+        if doc.text:
+            docs.append(doc)
+        if i % 100 == 0:
+            typer.echo(f"{i}/{len(targets)}")
+    docs.sort(key=lambda d: d.doc_id)
+    write_jsonl(PROCESSED / "interp_documents.jsonl", docs)
+    write_jsonl(PROCESSED / "interp_units.jsonl", [whole_doc_unit(d) for d in docs])
+    typer.echo(f"저장 {len(docs)}건, 실패 {len(failed)}건, 본문 없음 {len(targets) - len(docs) - len(failed)}건")
+
+
+@collect_app.command("annexes")
+def collect_annexes_cmd() -> None:
+    """법령 · 시행령 본문의 별표를 근거 문서로 만든다. 조문 범위가 정해진 법령은 그 조문 관련 별표만."""
+    from labor_law_rag.collect.law import collect_law
+    from labor_law_rag.io import read_jsonl, write_jsonl
+    from labor_law_rag.models import Document
+    from labor_law_rag.normalize.annex import parse_annexes
+    from labor_law_rag.normalize.qa import whole_doc_unit
+
+    cfg = load_corpus_config()
+    fetcher, oc = _law_fetcher()
+    law_docs = {d.title: d for d in read_jsonl(PROCESSED / "law_documents.jsonl", Document)}
+    kept = {t: {a[0] for a in d.meta.get("articles", [])} for t, d in law_docs.items()}
+    docs, missing = [], []
+    for spec in cfg.laws:
+        if spec.kind not in ("law", "decree"):
+            continue
+        path = collect_law(fetcher, oc, spec, cfg.base_date)  # 캐시에서 읽는다
+        r = parse_annexes(path.read_bytes(), law_name=spec.name, effective_date=law_docs[spec.name].date,
+                          url=f"https://www.law.go.kr/법령/{spec.name.replace(' ', '')}")
+        ann = r.docs
+        if spec.articles or spec.delegated_from:
+            ann = [d for d in ann if set(d.meta["related_articles"]) & kept.get(spec.name, set())]
+        docs.extend(ann)
+        missing.extend(r.missing)
+        typer.echo(f"{spec.name}: 별표 {len(ann)}개" + (f" (범위 밖 {len(r.docs) - len(ann)}개 제외)"
+                                                       if len(ann) < len(r.docs) else ""))
+    write_jsonl(PROCESSED / "annex_documents.jsonl", docs)
+    write_jsonl(PROCESSED / "annex_units.jsonl", [whole_doc_unit(d) for d in docs])
+    typer.echo(f"저장 {len(docs)}개, 텍스트 없는 별표 {len(missing)}개")
+    for m in missing:
+        typer.echo(f"  텍스트 없음: {m}")
+
+
 @collect_app.command("laws")
 def collect_laws() -> None:
     """기준일에 시행 중인 법령 · 시행령 본문을 받아 조 · 항 단위로 정규화한다."""
-    from labor_law_rag.collect.law import collect_law
+    from labor_law_rag.collect.law import collect_law, collect_notice
     from labor_law_rag.io import write_jsonl
     from labor_law_rag.normalize.law_xml import parse_law
-
-    from labor_law_rag.collect.law import collect_notice
     from labor_law_rag.normalize.scope import delegated_articles, filter_articles, parse_notice
 
     cfg = load_corpus_config()

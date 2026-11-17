@@ -49,7 +49,7 @@ def filter_articles(
 
 def _unit_article(unit: EvidenceUnit, doc: Document) -> str:
     """unit_id에서 조 키를 꺼낸다. 법령명에 숫자가 섞여도 되도록 법령명 뒤 부분만 본다."""
-    rest = unit.unit_id[len(doc.title):] if unit.unit_id.startswith(doc.title) else unit.unit_id
+    rest = unit.unit_id.removeprefix(doc.title)
     return _ART_KEY.search(rest).group(1)
 
 
