@@ -37,3 +37,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
+
+[tool.ruff.lint]
+# B008: typer.Option 기본값 관례, UP047: 3.12 제네릭 문법은 강제하지 않음, C408: 테스트의 dict() 허용
+ignore = ["B008", "UP047", "C408"]

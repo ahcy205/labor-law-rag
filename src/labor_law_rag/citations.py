@@ -52,6 +52,7 @@ def extract_citations(text: str, law_names: list[str], index: UnitIndex) -> list
     result: list[str] = []
     last_law: str | None = None
     pending_law: str | None = None
+    prev_end = 0
     for m in pattern.finditer(text):
         if m.group("law"):
             last_law = pending_law = _normalize(m.group("law"), law_names)

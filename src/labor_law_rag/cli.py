@@ -116,6 +116,60 @@ def finalize_cmd(force: bool = typer.Option(False, help="이미 있는 평가 �
     typer.echo(split_table(load_evalset(out, "all")))
 
 
+def _fmt(v) -> str:
+    return f"{v.mean:.3f} [{v.ci_low:.3f}, {v.ci_high:.3f}]"
+
+
+@app.command("evaluate")
+def evaluate_cmd(
+    run: Path = typer.Option(..., help="실행 결과 JSONL ({qid, chunks})"),
+    experiment: str = typer.Option(..., help="실험 이름 (예: E0)"),
+    split: str = typer.Option("dev", help="dev 또는 test"),
+    final: bool = typer.Option(False, help="테스트 세트 최종 측정 (설계 4.4)"),
+) -> None:
+    """검색 실행 결과를 평가 세트로 채점하고 results/에 남긴다."""
+    from labor_law_rag.evaluate.metrics import RunScores
+    from labor_law_rag.evaluate.runner import SplitLockedError, evaluate
+
+    if split not in ("dev", "test"):
+        raise typer.BadParameter("split은 dev 또는 test")
+    try:
+        out = evaluate(run, experiment=experiment, split=split, final=final)
+    except SplitLockedError as e:
+        typer.echo(str(e))
+        raise typer.Exit(2) from e
+    s = RunScores.model_validate_json((out / "metrics.json").read_text(encoding="utf-8"))
+    typer.echo(f"결과: {out}  (문항 {s.n_items}, 평균 청크 길이 {s.avg_chunk_chars:.0f}자)")
+    if s.missing_qids:
+        typer.echo(f"경고: 결과 파일에 없는 문항 {len(s.missing_qids)}개는 0점으로 계산했습니다")
+    typer.echo("구분 | n | recall@5 [95% CI] | all-hit@5 [95% CI] | MRR@10 [95% CI]")
+    typer.echo(f"전체 | {s.n_items} | {_fmt(s.overall['recall@5'])} | {_fmt(s.overall['all_hit@5'])} | "
+               f"{_fmt(s.overall['mrr'])}")
+    for q, m in s.by_qtype.items():
+        typer.echo(f"{q} | {s.n_by_qtype[q]} | {_fmt(m['recall@5'])} | {_fmt(m['all_hit@5'])} | {_fmt(m['mrr'])}")
+
+
+@app.command("sanity-run")
+def sanity_run_cmd(
+    kind: str = typer.Option(..., help="oracle 또는 random"),
+    split: str = "dev",
+    out: Path | None = None,
+) -> None:
+    """평가 도구 점검용 실행 결과를 만든다. oracle은 만점, random은 0에 가까워야 한다."""
+    from labor_law_rag.corpus import UnitIndex
+    from labor_law_rag.evalset.split import load_evalset
+    from labor_law_rag.evaluate.runner import make_sanity_run
+    from labor_law_rag.io import write_jsonl
+
+    if kind not in ("oracle", "random"):
+        raise typer.BadParameter("kind는 oracle 또는 random")
+    index = UnitIndex.from_files(PROCESSED / "corpus_documents.jsonl", PROCESSED / "corpus_units.jsonl")
+    rows = make_sanity_run(kind, load_evalset(EVALSET, split), index, seed=load_corpus_config().seed)
+    out = out or Path("results") / "sanity" / f"run_{kind}_{split}.jsonl"
+    write_jsonl(out, rows)
+    typer.echo(f"{out} ({len(rows)}문항)")
+
+
 @app.command("import-drafts")
 def import_drafts_cmd(path: Path, origin: str = typer.Option(..., help="manual 또는 claude_code_draft")) -> None:
     """직접 쓰거나 Claude Code로 쓴 문항 JSONL을 초안에 추가한다."""
