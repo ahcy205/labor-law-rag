@@ -92,6 +92,30 @@ def review_cmd(
     build_app(store, index, held).launch(server_name="127.0.0.1", server_port=port)
 
 
+EVALSET = DATA / "eval" / "evalset.jsonl"
+
+
+@app.command("finalize")
+def finalize_cmd(force: bool = typer.Option(False, help="이미 있는 평가 세트를 덮어쓴다(판단 기록 필요)")) -> None:
+    """검수 로그를 적용해 평가 세트를 확정하고 dev/test 6:4로 나눈다."""
+    from labor_law_rag.corpus import UnitIndex
+    from labor_law_rag.evalset.review_store import ReviewStore
+    from labor_law_rag.evalset.split import finalize, load_evalset, split_table
+    from labor_law_rag.io import read_jsonl
+    from labor_law_rag.models import Document
+
+    index = UnitIndex.from_files(PROCESSED / "corpus_documents.jsonl", PROCESSED / "corpus_units.jsonl")
+    held = {d.doc_id for d in read_jsonl(HELDOUT, Document)} if HELDOUT.exists() else set()
+    store = ReviewStore(DRAFTS, REVIEW_LOG, index, heldout_ids=held)
+    done, total = store.progress()
+    if done < total:
+        typer.echo(f"경고: 검수하지 않은 초안이 {total - done}개 있습니다(검수 {done}/{total}).")
+    if force:
+        typer.echo("경고: 평가 세트를 다시 나눕니다. docs/decisions.md에 이유를 남기세요.")
+    out = finalize(store, EVALSET, seed=load_corpus_config().seed, force=force)
+    typer.echo(split_table(load_evalset(out, "all")))
+
+
 @app.command("import-drafts")
 def import_drafts_cmd(path: Path, origin: str = typer.Option(..., help="manual 또는 claude_code_draft")) -> None:
     """직접 쓰거나 Claude Code로 쓴 문항 JSONL을 초안에 추가한다."""
