@@ -1,0 +1,12 @@
+{
+  "experiment": "sanity-random",
+  "git_commit": "99dfe12247191a3a6d0c50af9bbd933e00d5df7a",
+  "git_dirty": true,
+  "ts": "2026-11-18T00:18:35.892841+09:00",
+  "split": "dev",
+  "final": false,
+  "evalset_sha256": "112abe80bd1000e2205bd041bbae9f98adffdebb927680c4ddf695f228c1a0fd",
+  "corpus_manifest_sha256": "331fac18b845ae40c05cc953d5d0b359f2e5f7d0e4069834eb7e151d983dcd1b",
+  "run_path": "results\\sanity\\run_random_dev.jsonl",
+  "run_sha256": "81395fa05891a7b128ef94d4253ddfdb4537662697d5cc8d19549a971533832c"
+}

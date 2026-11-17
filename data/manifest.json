@@ -1,0 +1,94 @@
+{
+  "base_date": "2026-11-17",
+  "created_at": "2026-11-17T15:04:17.312428+00:00",
+  "files": {
+    "corpus_documents.jsonl": {
+      "count": 1581,
+      "sha256": "b3e350bd438ea9f664c2e66f771551bcda5e5ca25a809de7381b0ac658db3ddc"
+    },
+    "corpus_units.jsonl": {
+      "count": 2696,
+      "sha256": "d3ee069bc063829461095efcd00aac2a52709eb88fc04384ddb92a133d3adb83"
+    },
+    "eval_sources.jsonl": {
+      "count": 40,
+      "sha256": "a45abe3c90773abcc0957f5e0a7cb9334078b3d3392572f86ba2b840432ae932"
+    }
+  },
+  "corpus_by_source": {
+    "annex": 12,
+    "decree": 4,
+    "interpretation": 1559,
+    "law": 5,
+    "notice": 1
+  },
+  "corpus_by_topic": {
+    "근로계약": 436,
+    "근로시간": 593,
+    "연장근로": 245,
+    "연차휴가": 307,
+    "육아휴직": 44,
+    "임금": 917,
+    "주휴수당": 128,
+    "최저임금": 34,
+    "출산휴가": 19,
+    "퇴직금": 280,
+    "해고": 288,
+    "휴게": 114
+  },
+  "heldout_by_topic": {
+    "근로계약": 4,
+    "근로시간": 5,
+    "연장근로": 2,
+    "연차휴가": 5,
+    "육아휴직": 1,
+    "임금": 13,
+    "주휴수당": 1,
+    "퇴직금": 3,
+    "해고": 5,
+    "휴게": 1
+  },
+  "near_dup_threshold": 0.75,
+  "near_duplicates_removed": {
+    "interp:12492": {
+      "heldout": "interp:14838",
+      "score": 0.902
+    },
+    "interp:14794": {
+      "heldout": "interp:314186",
+      "score": 0.902
+    },
+    "interp:15108": {
+      "heldout": "interp:28526",
+      "score": 0.795
+    },
+    "interp:15174": {
+      "heldout": "interp:9668",
+      "score": 0.904
+    },
+    "interp:22090": {
+      "heldout": "interp:213946",
+      "score": 0.87
+    },
+    "interp:2264": {
+      "heldout": "interp:22894",
+      "score": 0.984
+    },
+    "interp:22850": {
+      "heldout": "interp:14976",
+      "score": 0.961
+    },
+    "interp:22880": {
+      "heldout": "interp:15024",
+      "score": 0.95
+    },
+    "interp:314962": {
+      "heldout": "interp:14782",
+      "score": 0.851
+    },
+    "interp:9248": {
+      "heldout": "interp:280050",
+      "score": 0.953
+    }
+  }
+}
