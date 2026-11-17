@@ -72,6 +72,20 @@ def test_proposal_to_form_values():
     assert (q, a, n, t, k, ev, nt) == ("연차 며칠?", "15일", "15", "fact", NO_KIND, "근로기준법 제60조 제1항", "n")
 
 
+def test_review_base_uses_last_edit_for_reopened_item(tmp_path, law_index):
+    from labor_law_rag.evalset.review_app import review_base
+    from labor_law_rag.evalset.review_store import ReviewStore
+    from labor_law_rag.io import write_jsonl
+
+    write_jsonl(tmp_path / "d.jsonl", [BASE])
+    store = ReviewStore(tmp_path / "d.jsonl", tmp_path / "log.jsonl", law_index, heldout_ids=set())
+    assert review_base(store, BASE) == (BASE, "")
+    store.record("llm-1", "edit", BASE.model_copy(update={"question": "고친 질문"}), derivable=True)
+    store.reopen("llm-1", "근거 interp:1 이 말뭉치에서 빠짐")
+    item, note = review_base(store, BASE)
+    assert item.question == "고친 질문" and "다시 검수" in note and "interp:1" in note
+
+
 def test_build_app_with_opinions(tmp_path, law_index):
     from labor_law_rag.evalset.review_store import ReviewStore
     from labor_law_rag.io import write_jsonl

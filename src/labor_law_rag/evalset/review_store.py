@@ -27,8 +27,40 @@ class ReviewStore:
     def _log(self) -> list[dict]:
         return read_jsonl(self.log_path) if self.log_path.exists() else []
 
+    def _last_rows(self) -> dict[str, dict]:
+        return {row["qid"]: row for row in self._log()}
+
     def decided(self) -> set[str]:
-        return {row["qid"] for row in self._log()}
+        """마지막 줄이 reopen(다시 검수)이 아닌 문항."""
+        return {q for q, row in self._last_rows().items() if row["action"] != "reopen"}
+
+    def reopen(self, qid: str, reason: str) -> None:
+        """결정한 문항을 다시 검수 대기로 돌린다(예: 근거 문서가 말뭉치에서 빠짐). 로그에 한 줄 추가한다."""
+        if qid not in self.decided():
+            raise ValueError(f"{qid}: 결정한 적이 없는 문항은 다시 열 수 없습니다")
+        append_jsonl(self.log_path, {"qid": qid, "action": "reopen", "reason": reason,
+                                     "ts": datetime.now(UTC).isoformat()})
+
+    def reopen_reason(self, qid: str) -> str | None:
+        row = self._last_rows().get(qid)
+        return row["reason"] if row and row["action"] == "reopen" else None
+
+    def latest(self, qid: str) -> DraftItem | None:
+        """마지막으로 저장한 승인 · 수정 내용. 다시 연 문항을 그 내용에서 이어 검수하는 데 쓴다."""
+        item = None
+        for row in self._log():
+            if row["qid"] == qid and row["action"] in ("approve", "edit"):
+                item = row["item"]
+        return DraftItem.model_validate({k: v for k, v in item.items() if k != "split"}) if item else None
+
+    def stale(self) -> dict[str, list[str]]:
+        """확정 상태 문항 중 근거 ID가 지금 말뭉치에 없는 것. 말뭉치를 다시 만든 뒤 확인한다."""
+        out = {}
+        for qid, it in self.current().items():
+            missing = [u for u in it.evidence if u not in self.index]
+            if missing:
+                out[qid] = missing
+        return out
 
     def pending(self) -> list[DraftItem]:
         done = self.decided()
@@ -67,7 +99,7 @@ class ReviewStore:
     def current(self) -> dict[str, EvalItem]:
         state: dict[str, EvalItem] = {}
         for row in self._log():
-            if row["action"] == "delete":
+            if row["action"] in ("delete", "reopen"):
                 state.pop(row["qid"], None)
             else:
                 state[row["qid"]] = EvalItem.model_validate(row["item"])

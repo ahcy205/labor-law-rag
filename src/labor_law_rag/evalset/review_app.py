@@ -95,6 +95,14 @@ def _source_panel(item: DraftItem, heldout: dict[str, Document]) -> str:
     return f"#### 떼어 둔 원문: {src.title} ({src.date})\n\n{src.text}"
 
 
+def review_base(store: ReviewStore, draft: DraftItem) -> tuple[DraftItem, str]:
+    """입력칸에 채울 문항과 안내문. 다시 연 문항은 마지막으로 저장한 내용에서 시작한다."""
+    reason = store.reopen_reason(draft.qid)
+    if reason is None:
+        return draft, ""
+    return store.latest(draft.qid) or draft, f"⚠ 다시 검수: {reason}"
+
+
 def build_app(
     store: ReviewStore, index: UnitIndex, heldout: dict[str, Document], opinions: dict[str, dict] | None = None
 ) -> gr.Blocks:
@@ -118,10 +126,11 @@ def build_app(
         if not qid:
             return ("", prog, "모든 초안을 검수했습니다.", "", "", "", QTYPES[0], NO_KIND, "", "", False,
                     message, "", "", "")
-        d = drafts[qid]
+        d, note = review_base(store, drafts[qid])
         nums = ", ".join(f"{x:g}" for x in d.answer_numbers)
+        head = f"`{qid}` · 출처 {d.origin} {d.origin_detail}" + (f"\n\n**{note}**" if note else "")
         return (
-            qid, prog, f"`{qid}` · 출처 {d.origin} {d.origin_detail}", d.question, d.answer, nums, d.qtype,
+            qid, prog, head, d.question, d.answer, nums, d.qtype,
             d.no_answer_kind or NO_KIND, "\n".join(d.evidence), d.notes, False, message,
             evidence_panel(d.evidence, index), _source_panel(d, heldout), opinion_panel(opinions.get(qid)),
         )

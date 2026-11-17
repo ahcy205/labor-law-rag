@@ -112,6 +112,49 @@ def test_manifest_records_hashes_and_counts(tmp_path):
     assert len(m["files"]["corpus_documents.jsonl"]["sha256"]) == 64
 
 
+LONG = [
+    "연차휴가를 사용하지 않고 퇴직한 경우 미사용 연차휴가수당을 지급해야 하는지 질의합니다 회답 지급해야 합니다",
+    "퇴직금 산정 시 평균임금에 정기상여금을 포함하는지 질의합니다 회답 지급된 상여금의 12분의 3을 포함합니다",
+    "주휴수당은 1주 소정근로일을 개근한 경우에만 발생하는지 질의합니다 회답 개근하면 유급휴일을 줍니다",
+]
+
+
+def test_near_duplicates_finds_rewordings_only():
+    from labor_law_rag.corpus import near_duplicates
+
+    held = [_interp(1, LONG[0])]
+    twin = _interp(2, LONG[0].replace("질의합니다", "묻습니다"))
+    other = _interp(3, LONG[1])
+    law = Document(doc_id="law:x", source_type="law", title="x", text=LONG[0], date=None, url="", license="")
+    found = near_duplicates(held, [twin, other, law], threshold=0.75)
+    assert set(found) == {"interp:2"}
+    assert found["interp:2"][0] == "interp:1" and 0.75 <= found["interp:2"][1] < 1.0
+
+
+def test_build_removes_near_duplicates_of_heldout(tmp_path):
+    p = tmp_path / "processed"
+    p.mkdir()
+    interps = [_interp(i, LONG[i] + f" 사례 {i}") for i in range(3)]
+    interps += [_interp(100 + i, LONG[i] + f" 사례 {i} 참고") for i in range(3)]  # 각 해석의 쌍둥이
+    write_jsonl(p / "interp_documents.jsonl", interps)
+    write_jsonl(p / "interp_units.jsonl",
+                [EvidenceUnit(unit_id=d.doc_id, doc_id=d.doc_id, start=0, end=len(d.text)) for d in interps])
+    build = build_corpus(
+        processed_dir=p, heldout_path=tmp_path / "held.jsonl", manifest_path=tmp_path / "m.json",
+        topics=TOPICS, holdout_counts={"interpretation": 1}, seed=1, base_date=date(2026, 11, 17),
+        near_dup_threshold=0.75,
+    )
+    held = {d.doc_id for d in read_jsonl(build.heldout, Document)}
+    corpus = {d.doc_id for d in read_jsonl(build.corpus_documents, Document)}
+    twin = {f"interp:{i}": f"interp:{(i + 100) % 200}" for i in [*range(3), *range(100, 103)]}
+    assert all(twin[h] not in corpus for h in held)
+    m = json.loads(build.manifest.read_text(encoding="utf-8"))
+    removed = m["near_duplicates_removed"]
+    assert {twin[h] for h in held} - held <= set(removed)
+    assert all(v["heldout"] in held and v["score"] >= 0.75 for v in removed.values())
+    assert not {u.doc_id for u in read_jsonl(build.corpus_units, EvidenceUnit)} & set(removed)
+
+
 def test_rebuild_refused_without_force(tmp_path):
     run_build(tmp_path)
     with pytest.raises(FileExistsError):

@@ -63,6 +63,34 @@ def select_holdout(docs: list[Document], counts: dict[str, int], seed: int) -> s
     return chosen
 
 
+def _char_grams(text: str, n: int = 6) -> set[str]:
+    t = "".join(text.split())
+    return {t[i:i + n] for i in range(len(t) - n + 1)}
+
+
+def near_duplicates(
+    heldout: list[Document], candidates: list[Document], *, threshold: float = 0.75, n: int = 6
+) -> dict[str, tuple[str, float]]:
+    """떼어 둔 원문과 거의 같은 말뭉치 문서를 찾는다 (설계 4.3: 남겨 두면 recall이 부풀려진다).
+
+    공백을 지운 글자 n-gram의 겹침을 짧은 쪽 크기로 나눈 값이 threshold 이상이면 중복으로 본다.
+    주제 필터 대상(법령해석)만 본다. 반환: {말뭉치 doc_id: (떼어 둔 doc_id, 겹침)}.
+    """
+    held_grams = [(h.doc_id, g) for h in heldout if (g := _char_grams(h.text, n))]
+    found: dict[str, tuple[str, float]] = {}
+    for d in candidates:
+        if d.source_type not in TOPIC_FILTERED:
+            continue
+        g = _char_grams(d.text, n)
+        if not g:
+            continue
+        best = max(((hid, len(g & hg) / min(len(g), len(hg))) for hid, hg in held_grams),
+                   key=lambda x: x[1], default=None)
+        if best and best[1] >= threshold:
+            found[d.doc_id] = (best[0], round(best[1], 3))
+    return found
+
+
 class CorpusBuild(BaseModel):
     corpus_documents: Path
     corpus_units: Path
@@ -84,6 +112,7 @@ def build_corpus(
     holdout_counts: dict[str, int],
     seed: int,
     base_date: date,
+    near_dup_threshold: float | None = None,
     force: bool = False,
 ) -> CorpusBuild:
     processed_dir = Path(processed_dir)
@@ -106,8 +135,10 @@ def build_corpus(
     kept = [d for d in tagged if d.source_type not in TOPIC_FILTERED or d.topics]
     held_ids = select_holdout(kept, holdout_counts, seed)
 
-    corpus = sorted((d for d in kept if d.doc_id not in held_ids), key=lambda d: d.doc_id)
     heldout = sorted((d for d in kept if d.doc_id in held_ids), key=lambda d: d.doc_id)
+    rest = [d for d in kept if d.doc_id not in held_ids]
+    dups = near_duplicates(heldout, rest, threshold=near_dup_threshold) if near_dup_threshold else {}
+    corpus = sorted((d for d in rest if d.doc_id not in dups), key=lambda d: d.doc_id)
     corpus_ids = {d.doc_id for d in corpus}
     corpus_units = sorted((u for u in units if u.doc_id in corpus_ids), key=lambda u: (u.doc_id, u.start))
 
@@ -140,6 +171,8 @@ def build_corpus(
         "corpus_by_source": dict(sorted(by_source.items())),
         "corpus_by_topic": dict(sorted(by_topic.items())),
         "heldout_by_topic": dict(sorted(_first_topic_counts(heldout).items())),
+        "near_dup_threshold": near_dup_threshold,
+        "near_duplicates_removed": {k: {"heldout": h, "score": s} for k, (h, s) in sorted(dups.items())},
     }
     out.manifest.parent.mkdir(parents=True, exist_ok=True)
     out.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",

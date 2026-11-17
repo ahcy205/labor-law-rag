@@ -57,6 +57,7 @@ class CorpusConfig(BaseModel):
     seed: int
     laws: list[LawSpec]
     holdout: dict[str, int]
+    near_dup_threshold: float | None = None
 
 
 def _load_yaml(path: Path):

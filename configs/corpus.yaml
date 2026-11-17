@@ -15,3 +15,5 @@ laws:
      exclude_articles: [제104조의9, 제104조의16, 제145조, 제145조의2]}
   - {name: 최저임금 고시, kind: notice}
 holdout: {interpretation: 40}
+# 떼어 둔 원문과 글자 6-gram이 이만큼 겹치는 법령해석도 말뭉치에서 뺀다 (설계 4.3, decisions 참고)
+near_dup_threshold: 0.75

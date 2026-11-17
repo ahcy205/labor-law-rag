@@ -222,6 +222,24 @@ def review_cmd(
 EVALSET = DATA / "eval" / "evalset.jsonl"
 
 
+@app.command("reopen-stale")
+def reopen_stale_cmd() -> None:
+    """말뭉치를 다시 만든 뒤 근거 ID가 사라진 문항을 다시 검수 대기로 돌린다."""
+    from labor_law_rag.corpus import UnitIndex
+    from labor_law_rag.evalset.review_store import ReviewStore
+    from labor_law_rag.io import read_jsonl
+    from labor_law_rag.models import Document
+
+    index = UnitIndex.from_files(PROCESSED / "corpus_documents.jsonl", PROCESSED / "corpus_units.jsonl")
+    held = {d.doc_id for d in read_jsonl(HELDOUT, Document)} if HELDOUT.exists() else set()
+    store = ReviewStore(DRAFTS, REVIEW_LOG, index, heldout_ids=held)
+    stale = store.stale()
+    for qid, missing in sorted(stale.items()):
+        store.reopen(qid, f"근거 {', '.join(missing)}가 말뭉치에서 빠졌습니다(떼어 둔 원문의 근접 중복)")
+        typer.echo(f"{qid}: {', '.join(missing)}")
+    typer.echo(f"다시 검수할 문항 {len(stale)}개")
+
+
 @app.command("finalize")
 def finalize_cmd(force: bool = typer.Option(False, help="이미 있는 평가 세트를 덮어쓴다(판단 기록 필요)")) -> None:
     """검수 로그를 적용해 평가 세트를 확정하고 dev/test 6:4로 나눈다."""
@@ -234,6 +252,10 @@ def finalize_cmd(force: bool = typer.Option(False, help="이미 있는 평가 �
     index = UnitIndex.from_files(PROCESSED / "corpus_documents.jsonl", PROCESSED / "corpus_units.jsonl")
     held = {d.doc_id for d in read_jsonl(HELDOUT, Document)} if HELDOUT.exists() else set()
     store = ReviewStore(DRAFTS, REVIEW_LOG, index, heldout_ids=held)
+    stale = store.stale()
+    if stale:
+        typer.echo(f"근거가 말뭉치에 없는 문항이 {len(stale)}개 있습니다. `llr reopen-stale` 후 다시 검수하세요.")
+        raise typer.Exit(2)
     done, total = store.progress()
     if done < total:
         typer.echo(f"경고: 검수하지 않은 초안이 {total - done}개 있습니다(검수 {done}/{total}).")
@@ -322,8 +344,9 @@ def build_corpus_cmd(force: bool = typer.Option(False, help="떼어 둔 원문�
     cfg = load_corpus_config()
     build = build_corpus(
         processed_dir=PROCESSED, heldout_path=HELDOUT, manifest_path=MANIFEST, topics=load_topics(), exclude=load_topic_excludes(),
-        holdout_counts=cfg.holdout, seed=cfg.seed, base_date=cfg.base_date, force=force,
+        holdout_counts=cfg.holdout, seed=cfg.seed, base_date=cfg.base_date,
+        near_dup_threshold=cfg.near_dup_threshold, force=force,
     )
     m = json.loads(build.manifest.read_text(encoding="utf-8"))
-    typer.echo(json.dumps({k: m[k] for k in ("files", "corpus_by_source", "heldout_by_topic")},
+    typer.echo(json.dumps({k: m[k] for k in ("files", "corpus_by_source", "heldout_by_topic", "near_duplicates_removed")},
                           ensure_ascii=False, indent=2))

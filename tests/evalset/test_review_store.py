@@ -86,3 +86,36 @@ def test_last_decision_wins_and_delete_removes(store_factory):
     s.record(d.qid, "delete")
     assert d.qid not in s.current()
     assert s.progress() == (1, 3)
+
+
+def test_reopen_returns_item_to_pending_and_keeps_last_edit(store_factory):
+    s = store_factory()
+    d = s.pending()[0]
+    edited = d.model_copy(update={"question": "연차는 며칠?"})
+    s.record(d.qid, "edit", edited, derivable=True)
+    s.reopen(d.qid, "근거 문서가 말뭉치에서 빠짐")
+    s2 = store_factory()
+    assert d.qid in {x.qid for x in s2.pending()} and d.qid not in s2.current()
+    assert s2.progress() == (0, 3)
+    assert s2.latest(d.qid).question == "연차는 며칠?"
+    assert s2.reopen_reason(d.qid) == "근거 문서가 말뭉치에서 빠짐"
+    s2.record(d.qid, "approve", s2.latest(d.qid), derivable=True)
+    assert s2.current()[d.qid].question == "연차는 며칠?" and s2.reopen_reason(d.qid) is None
+
+
+def test_reopen_unknown_or_undecided_rejected(store_factory):
+    s = store_factory()
+    with pytest.raises(ValueError):
+        s.reopen("nope", "x")
+    with pytest.raises(ValueError):
+        s.reopen(s.pending()[0].qid, "x")
+
+
+def test_stale_lists_evidence_missing_from_index(store_factory, tmp_path):
+    s = store_factory()
+    d = s.pending()[0]
+    s.record(d.qid, "approve", d, derivable=True)
+    assert s.stale() == {}
+    log = tmp_path / "review_log.jsonl"
+    log.write_text(log.read_text(encoding="utf-8").replace("제60조 제1항", "제60조 제9항"), encoding="utf-8")
+    assert s.stale() == {"llm-1": ["근로기준법 제60조 제9항"]}

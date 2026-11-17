@@ -25,6 +25,7 @@ def test_corpus_config_loads_repo_file():
     assert any(law.name == "고용보험법" and "제70조" in law.articles for law in c.laws)
     decree = next(law for law in c.laws if law.name == "고용보험법 시행령")
     assert decree.delegated_from == "고용보험법" and "제145조" in decree.exclude_articles
+    assert c.near_dup_threshold == 0.75
 
 
 def test_topics_load():
