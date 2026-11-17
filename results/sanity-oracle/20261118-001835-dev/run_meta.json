@@ -1,0 +1,12 @@
+{
+  "experiment": "sanity-oracle",
+  "git_commit": "99dfe12247191a3a6d0c50af9bbd933e00d5df7a",
+  "git_dirty": true,
+  "ts": "2026-11-18T00:18:35.045632+09:00",
+  "split": "dev",
+  "final": false,
+  "evalset_sha256": "112abe80bd1000e2205bd041bbae9f98adffdebb927680c4ddf695f228c1a0fd",
+  "corpus_manifest_sha256": "331fac18b845ae40c05cc953d5d0b359f2e5f7d0e4069834eb7e151d983dcd1b",
+  "run_path": "results\\sanity\\run_oracle_dev.jsonl",
+  "run_sha256": "2ed910df69e9ad94ce463b3ee2443a54901708afe6ab3b711a361126610cfec5"
+}
