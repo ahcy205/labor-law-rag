@@ -67,6 +67,31 @@ def draft_heldout(model: str = DRAFT_MODEL) -> None:
     _report_drafts()
 
 
+REVIEW_LOG = DATA / "eval" / "review_log.jsonl"
+
+
+@app.command("review")
+def review_cmd(
+    port: int = 7861,
+    drafts: Path = DRAFTS,
+    log: Path = REVIEW_LOG,
+    docs: Path = PROCESSED / "corpus_documents.jsonl",
+    units: Path = PROCESSED / "corpus_units.jsonl",
+    heldout: Path = HELDOUT,
+) -> None:
+    """Gradio 검수 화면을 띄운다. 결정은 review_log.jsonl에 한 줄씩 쌓인다."""
+    from labor_law_rag.corpus import UnitIndex
+    from labor_law_rag.evalset.review_app import build_app
+    from labor_law_rag.evalset.review_store import ReviewStore
+    from labor_law_rag.io import read_jsonl
+    from labor_law_rag.models import Document
+
+    index = UnitIndex.from_files(docs, units)
+    held = {d.doc_id: d for d in read_jsonl(heldout, Document)} if heldout.exists() else {}
+    store = ReviewStore(drafts, log, index, heldout_ids=set(held))
+    build_app(store, index, held).launch(server_name="127.0.0.1", server_port=port)
+
+
 @app.command("import-drafts")
 def import_drafts_cmd(path: Path, origin: str = typer.Option(..., help="manual 또는 claude_code_draft")) -> None:
     """직접 쓰거나 Claude Code로 쓴 문항 JSONL을 초안에 추가한다."""
