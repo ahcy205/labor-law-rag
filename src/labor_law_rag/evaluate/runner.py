@@ -65,7 +65,7 @@ def evaluate(
     now = datetime.now().astimezone()
     out = Path(results_dir) / experiment / f"{now:%Y%m%d-%H%M%S}-{split}"
     out.mkdir(parents=True, exist_ok=False)
-    (out / "metrics.json").write_text(scores.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (out / "metrics.json").write_text(scores.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
     write_jsonl(out / "per_item.jsonl", per_item_rows(items, run, index))
     commit = _git("rev-parse", "HEAD")
     meta = {
@@ -80,7 +80,8 @@ def evaluate(
         "run_path": str(run_path),
         "run_sha256": _sha256(run_path),
     }
-    (out / "run_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (out / "run_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                                       newline="\n")
     if split == "test":
         append_jsonl(Path(results_dir) / "test_log.jsonl",
                      {"experiment": experiment, "run_path": str(run_path), "ts": meta["ts"], "git_commit": commit})

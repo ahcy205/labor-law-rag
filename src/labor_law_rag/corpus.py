@@ -19,9 +19,11 @@ TOPIC_FILTERED = {"interpretation"}
 
 
 def tag_topics(doc: Document, topics: dict[str, list[str]]) -> Document:
-    haystack = f"{doc.title}\n{doc.text}"
-    found = [name for name, kws in topics.items() if any(kw in haystack for kw in kws)]
-    return doc.model_copy(update={"topics": found})
+    """제목에 맞는 주제를 앞에, 본문에만 맞는 주제를 뒤에 둔다. topics[0]은 층화의 기준이 된다."""
+    in_title = [name for name, kws in topics.items() if any(kw in doc.title for kw in kws)]
+    in_text = [name for name, kws in topics.items()
+               if name not in in_title and any(kw in doc.text for kw in kws)]
+    return doc.model_copy(update={"topics": in_title + in_text})
 
 
 def _allocate(group_sizes: dict[str, int], total: int) -> dict[str, int]:
@@ -133,7 +135,8 @@ def build_corpus(
         "heldout_by_topic": dict(sorted(_first_topic_counts(heldout).items())),
     }
     out.manifest.parent.mkdir(parents=True, exist_ok=True)
-    out.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                            newline="\n")
     return out
 
 

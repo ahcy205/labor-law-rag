@@ -26,6 +26,13 @@ def test_tag_topics_matches_title_and_text():
     assert tag_topics(_interp(2, "산업안전 질의"), TOPICS).topics == []
 
 
+def test_title_topic_comes_first():
+    d = Document(doc_id="interp:5", source_type="interpretation", title="연차휴가 사용촉진 여부",
+                 text="근로계약상 임금과 퇴직금에 관한 내용", date=None, url="", license="")
+    topics = {"근로계약": ["근로계약"], "임금": ["임금"], "연차휴가": ["연차"], "퇴직금": ["퇴직금"]}
+    assert tag_topics(d, topics).topics == ["연차휴가", "근로계약", "임금", "퇴직금"]
+
+
 def test_holdout_is_deterministic_and_sized():
     docs = make_docs(interp=120)
     a = select_holdout(docs, {"interpretation": 40}, seed=1)

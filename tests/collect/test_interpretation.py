@@ -1,7 +1,12 @@
 from datetime import date
 from pathlib import Path
 
-from labor_law_rag.collect.interpretation import InterpRef, match_topics, parse_interp_list, parse_interpretation
+from labor_law_rag.collect.interpretation import (
+    InterpRef,
+    match_topics,
+    parse_interp_list,
+    parse_interpretation,
+)
 from labor_law_rag.normalize.qa import whole_doc_unit
 
 FIX = Path(__file__).parent.parent / "fixtures" / "interp"
